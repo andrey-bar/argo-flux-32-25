@@ -44,6 +44,38 @@ metadata:
 data:
   prometheus.rules: |-
     groups:
+    - name: cpu-alerts
+      rules:
+      - alert: HighNodeCPU
+        expr: (100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on node {{ $labels.instance }}"
+          description: "CPU usage is above 80% for more than 5 minutes on node {{ $labels.instance }}"
+          value: "{{ $value }}%"
+          
+      - alert: HighContainerCPU
+        expr: (sum by(namespace, pod, container) (rate(container_cpu_usage_seconds_total{container!="", container!="POD"}[5m])) * 100) > 70
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage in container {{ $labels.container }}"
+          description: "Container {{ $labels.container }} in pod {{ $labels.pod }} (namespace: {{ $labels.namespace }}) is using more than 70% CPU for 3 minutes"
+          value: "{{ $value }}%"
+          
+      - alert: HighPodCPU
+        expr: (sum by(namespace, pod) (rate(container_cpu_usage_seconds_total{container!="", container!="POD"}[5m])) * 100) > 60
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage in pod {{ $labels.pod }}"
+          description: "Pod {{ $labels.pod }} (namespace: {{ $labels.namespace }}) is using more than 60% CPU for 2 minutes"
+          value: "{{ $value }}%"
+
     - name: devopscube demo alert
       rules:
       - alert: High Pod Memory
@@ -53,30 +85,6 @@ data:
           severity: slack
         annotations:
           summary: High Memory Usage
-    - name: pod-alerts
-      rules:
-      - alert: PodHighCPU
-        expr: sum(rate(container_cpu_usage_seconds_total{image!=""}[5m])) by (namespace, pod) > 0.1
-        for: 1m
-        labels:
-          severity: slack
-        annotations:
-          summary: "🚨 {{ $labels.alertname }} firing on pod {{ $labels.pod }}"
-          description: |
-            Alert {{ $labels.alertname }} is firing.
-            Namespace: {{ $labels.namespace }}
-            Pod: {{ $labels.pod }}
-            Current value: {{ $value }}
-    - name: test-alerts
-      rules:
-      - alert: TestCPUAlert
-        expr: sum(rate(container_cpu_usage_seconds_total{image!=""}[10s])) by (namespace, pod) > 0.01
-        for: 10s
-        labels:
-          severity: test
-        annotations:
-          summary: "Test CPU Alert"
-          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} triggered a test CPU alert"
   prometheus.yml: |-
     global:
       scrape_interval: 5s
@@ -88,9 +96,7 @@ data:
       - scheme: http
         static_configs:
         - targets:
-          # - "alertmanager.monitoring.svc:9093"
-          # - 'localhost:9093'
-          - "alertmanager.monitoring.svc.cluster.local:9093"
+          - "alertmanager.monitoring.svc:9093"
 
     scrape_configs:
       - job_name: 'node-exporter'
